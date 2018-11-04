@@ -5,11 +5,16 @@ from asm_instrumentation import *
 import re
 import sys
 
-TMP_S = 'tmp.s'
+AR = 0x80
+BR = 0x80
 
 if ( __name__ == '__main__' ):
-    file_name = sys.argv[1]
-    with open(file_name, 'rb') as f:
+    if (len(sys.argv) != 3):
+        print 'usage --> %s [input_sfile] [output_sfile]' % (sys.argv[0])
+        exit()
+    input_file_name = sys.argv[1]
+    output_file_name = sys.argv[2]
+    with open(input_file_name, 'rb') as f:
         data = f.read()
     procedures = []
     procedure = []
@@ -43,15 +48,23 @@ if ( __name__ == '__main__' ):
         while (j < len(procedures[i])):
             ln = procedures[i][j][0]
             line = procedures[i][j][1]
-            if (start_subtract_offset == 1 and IsMemoryAccessInstruction(line)):
+            if (start_subtract_offset == 1):
                 if (IsStackMemoryAccessInstruction(line)):
                     procedures[i][j][1] = \
                             AddOffsetofMemoryAccessInstruction(line, 0x1000)
                     modified_lines.append((procedures[i][j][0], \
-                            AddOffsetofMemoryAccessInstruction(line, 0x1000) + \
-                            '\t\t####### offset is modified #######'))
+                            AddOffsetofMemoryAccessInstruction(line, 0x1000)))
                     #procedures[i][j][1] = procedures[i][j][1] +
                     #       '\t\t################### should be changed (offset)'
+                if ('\tret' in line):
+                    function_epilogue = ''
+                    function_epilogue += '####### poison stack frame ######\\\n'
+                    function_epilogue += '#\tcall poison\n'
+                    function_epilogue += line + '\n'
+                    function_epilogue += '#################################/\n'
+                    procedures[i][j][1] = function_epilogue
+                    modified_lines.append((procedures[i][j][0], \
+                                           function_epilogue))
             elif ('pushl\t%ebp' in line):
                 push_ebp_found = 1
             elif (push_ebp_found == 1 and
@@ -63,14 +76,14 @@ if ( __name__ == '__main__' ):
                     sub_esp_ln.append(procedures[i][j][0] + 1)
                     procedures[i][j][1] = ModifySubtractionInstruction(line,
                             0x1000)
-                    modified_lines.append((procedures[i][j][0],
-                            ModifySubtractionInstruction(line, 0x1000) + \
-                            '\t\t####### size is modified #######'))
+                    modified_lines.append((procedures[i][j][0], \
+                            ModifySubtractionInstruction(line, 0x1000)))
                     #procedures[i][j][1] = procedures[i][j][1] +
                     #'\t\t################### should be changed (size)'
                 elif ('push' not in line):
                     push_ebp_found = 0
                     mov_ebp_esp_found = 0
+            #function epilogue
             j += 1
         i += 1
 
@@ -80,15 +93,16 @@ if ( __name__ == '__main__' ):
     #        print ln, line
     #print sub_esp_ln
     #print modified_lines
-    with open()
-    print SubstituteLines(file_name, modified_lines)
+    substituted_data = SubstituteLines(data, modified_lines)
     tmp_redzone = """
             ####################################################################
             ################       it will be instrumented      ################
             ################ redzone will be costructed at here ################
             ####################################################################
     """
-    #with open(TMP_S, 'rb') as f:
-    #    data = f.read()
-    #print InjectStringtoFrontofLines(data, sub_esp_ln, tmp_redzone)
+    injected_data = InjectStringtoFrontofLines(substituted_data,
+                                               sub_esp_ln,
+                                               tmp_redzone)
+    with open(output_file_name, 'wb') as f:
+        f.write(injected_data)
 

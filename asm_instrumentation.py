@@ -70,7 +70,7 @@ def SubstituteLines(data, modified_lines):
         substituted_data += '\n' + instr + '\n'
         previous_idx = ln
     substituted_data += '\n'.join(data.split('\n')[ln:])
-    return substituted_data
+    return substituted_data + '\n\n'
 
 # SubstituteLinesinFile - substitute line in file to the given lines
 #
