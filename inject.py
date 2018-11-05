@@ -26,7 +26,7 @@ def InjectSanitizingRoutine(data):
         #then it adds sanitizing routine to front of the line.
         if (tf == True):
             modified_instruction = '\n'
-            modified_instruction += '############### sanitize ##############\\\n'
+            modified_instruction += '############### sanitize #############\\\n'
             modified_instruction += '\tpushl %eax\n'
             modified_instruction += '\tleal %s(%s), %%eax\n' % (hex(offset),reg)
             modified_instruction += '\tpushl %eax\n'
@@ -34,7 +34,7 @@ def InjectSanitizingRoutine(data):
             modified_instruction += '\taddl $0x4, %esp\n' # it can be removed
             modified_instruction += '\tpopl %eax\n'
             modified_instruction += lines[line_idx] + '\n'
-            modified_instruction += '################# end #################/\n'
+            modified_instruction += '################# end ################/\n'
             ###################################################################
             # note:
             # in .bio_instr,

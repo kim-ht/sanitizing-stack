@@ -7,17 +7,17 @@ import re
 # @instr - the instruction line to be checked
 # @return - if memory access instruction, it returns below list:
 #               (
-#                   True,
-#                   whether read/write in which it can be 'r' or 'w',
-#                   register used for memory access,
-#                   offset value used in memory access
+#                 True,
+#                 whether read/write in which it can be 'r' or 'w',
+#                 register used for memory access,
+#                 offset value used in memory access
 #               )
 #           if non-memory access instruction, it returns below list:
 #               (
-#                   False,
-#                   dummy string,
-#                   dummy string,
-#                   dummy string
+#                 False,
+#                 dummy string,
+#                 dummy string,
+#                 dummy string
 #               )
 #
 def IsMemoryAccessInstruction(instr):
@@ -79,11 +79,14 @@ def AddOffsetofMemoryAccessInstruction(instr, offset_to_add):
 #
 # @instr - instruction like "sub $N, %esp"
 # @value - the value to be added, value will be added to N
-# @reutrn - the modified instruction that value is added
+# @reutrn - (
+#             the modified instruction that value is added,
+#             the original value
+#           )
 #
 def ModifySubtractionInstruction(instr, value):
     original_value = re.findall('sub.*\t\$(.*), %esp', instr)[0]
     modified_value = hex(int(original_value, 16) + value)
     modified_instr = instr.replace('$' + original_value, '$' + modified_value)
-    return modified_instr
+    return modified_instr, original_value
 

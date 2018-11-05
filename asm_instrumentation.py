@@ -52,10 +52,10 @@ def InjectStringtoFrontofLinesinFile(file_name,
 # @data - the target data to be modified by given lines list
 # @modified_lines - the lines that substituted as has followed form:
 #                   [
-#                       [line number0, instruction0],
-#                       [line number1, instruction1],
-#                       ...
-#                       [line numbern, instructionn]
+#                     [line number0, instruction0],
+#                     [line number1, instruction1],
+#                     ...
+#                     [line numbern, instructionn]
 #                   ]
 #                   the given line number's content will be modifed to the
 #                   given instruction
@@ -77,10 +77,10 @@ def SubstituteLines(data, modified_lines):
 # @file_name - the target file to be modified by given lines list
 # @modified_lines - the lines that substituted as has followed form:
 #                   [
-#                       [line number0, instruction0],
-#                       [line number1, instruction1],
-#                       ...
-#                       [line numbern, instructionn]
+#                     [line number0, instruction0],
+#                     [line number1, instruction1],
+#                     ...
+#                     [line numbern, instructionn]
 #                   ]
 #                   the given line number's content will be modifed to the
 #                   given instruction

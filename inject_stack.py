@@ -5,17 +5,16 @@ from asm_instrumentation import *
 import re
 import sys
 
-AR = 0x80
-BR = 0x80
+AR = 0x20 - 0x4 - 0x4 # 0x4 for sfp, 0x4 for return address
+BR = 0x20
 
-if ( __name__ == '__main__' ):
-    if (len(sys.argv) != 3):
-        print 'usage --> %s [input_sfile] [output_sfile]' % (sys.argv[0])
-        exit()
-    input_file_name = sys.argv[1]
-    output_file_name = sys.argv[2]
-    with open(input_file_name, 'rb') as f:
-        data = f.read()
+# GetProceduresFromsFile - split procedures based on procedure address on
+#                          .s file
+#
+# @data - the target data to be splited into procedures
+# @return - list of procedures
+#
+def GetProceduresFromsFile(data):
     procedures = []
     procedure = []
     line_num = 0
@@ -37,6 +36,17 @@ if ( __name__ == '__main__' ):
             procedure.append([line_num, line])
     procedures.append(procedure)
     procedures = procedures[1:]
+    return procedures
+
+if ( __name__ == '__main__' ):
+    if (len(sys.argv) != 3):
+        print 'usage --> %s [input_sfile] [output_sfile]' % (sys.argv[0])
+        exit()
+    input_file_name = sys.argv[1]
+    output_file_name = sys.argv[2]
+    with open(input_file_name, 'rb') as f:
+        data = f.read()
+    procedures = GetProceduresFromsFile(data)
     sub_esp_ln = []
     modified_lines = []
     i = 0
@@ -50,12 +60,9 @@ if ( __name__ == '__main__' ):
             line = procedures[i][j][1]
             if (start_subtract_offset == 1):
                 if (IsStackMemoryAccessInstruction(line)):
-                    procedures[i][j][1] = \
-                            AddOffsetofMemoryAccessInstruction(line, 0x1000)
-                    modified_lines.append((procedures[i][j][0], \
-                            AddOffsetofMemoryAccessInstruction(line, 0x1000)))
-                    #procedures[i][j][1] = procedures[i][j][1] +
-                    #       '\t\t################### should be changed (offset)'
+                    modified_line = AddOffsetofMemoryAccessInstruction(line, AR)
+                    modified_lines.append((ln, modified_line))
+                #for function epilogue
                 if ('\tret' in line):
                     function_epilogue = ''
                     function_epilogue += '####### poison stack frame ######\\\n'
@@ -63,43 +70,48 @@ if ( __name__ == '__main__' ):
                     function_epilogue += line + '\n'
                     function_epilogue += '#################################/\n'
                     procedures[i][j][1] = function_epilogue
-                    modified_lines.append((procedures[i][j][0], \
-                                           function_epilogue))
+                    modified_lines.append((ln, function_epilogue))
             elif ('pushl\t%ebp' in line):
                 push_ebp_found = 1
-            elif (push_ebp_found == 1 and
-                    len(re.findall('movl[\t|\ *]%esp, %ebp', line)) != 0):
+            elif (push_ebp_found == 1 \
+                    and len(re.findall('movl[\t|\ *]%esp, %ebp', line)) != 0):
                 mov_ebp_esp_found = 1
             elif (push_ebp_found == 1 and mov_ebp_esp_found == 1):
                 if (len(re.findall('sub.*\t\$.*%esp', line)) != 0):
                     start_subtract_offset = 1
-                    sub_esp_ln.append(procedures[i][j][0] + 1)
-                    procedures[i][j][1] = ModifySubtractionInstruction(line,
-                            0x1000)
-                    modified_lines.append((procedures[i][j][0], \
-                            ModifySubtractionInstruction(line, 0x1000)))
-                    #procedures[i][j][1] = procedures[i][j][1] +
-                    #'\t\t################### should be changed (size)'
+                    sub_esp_ln.append(ln + 1)
+                    #procedures[i][j][1] = ModifySubtractionInstruction(line,
+                    #        AR + BR)
+                    modified_line, orig_val \
+                            = ModifySubtractionInstruction(line, AR + BR)
+                    modified_lines.append((ln, modified_line))
                 elif ('push' not in line):
                     push_ebp_found = 0
                     mov_ebp_esp_found = 0
-            #function epilogue
             j += 1
         i += 1
-
-    #for proc in procedures:
-    #    print 'proc@@@@@@@@@@@@@@@@'
-    #    for ln, line in proc:
-    #        print ln, line
-    #print sub_esp_ln
-    #print modified_lines
     substituted_data = SubstituteLines(data, modified_lines)
-    tmp_redzone = """
-            ####################################################################
-            ################       it will be instrumented      ################
-            ################ redzone will be costructed at here ################
-            ####################################################################
-    """
+    tmp_redzone = '\n'
+    tmp_redzone += '############## set redzone ###############\n'
+    tmp_redzone += '\tpushl %eax\n'
+    tmp_redzone += '\tleal 0x20(%esp), %eax\n'
+    tmp_redzone += '\tpushl $0xffffffff\n'
+    tmp_redzone += '\tpushl %eax\n'
+    tmp_redzone += '\tcall set_shadow2\n'
+    tmp_redzone += '\taddl $0x8, %esp\n' # it can be removed
+    tmp_redzone += '\tleal 4(%ebp), %eax\n'
+    tmp_redzone += '\tpushl $0xffffffff\n'
+    tmp_redzone += '\tpushl %eax\n'
+    tmp_redzone += '\tcall set_shadow2\n'
+    tmp_redzone += '\taddl $0x8, %esp\n' # it can be removed
+    tmp_redzone += '\tpopl %eax\n'
+    tmp_redzone += '##########################################\n'
+    ###################################################################
+    # note:
+    # in .set_shadow2,
+    # 'ret' must be patched to 'ret 8' !
+    # then 'addl $0x8, %esp' can be removed
+    ###################################################################
     injected_data = InjectStringtoFrontofLines(substituted_data,
                                                sub_esp_ln,
                                                tmp_redzone)
