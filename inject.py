@@ -3,6 +3,7 @@ from asm_instrumentation import *
 from asm_memaccess import *
 
 import sys
+import re
 
 # InjectSanitizingRoutine - inject sanitizing routines to front of memory
 #                           access instructions.
@@ -18,6 +19,9 @@ def InjectSanitizingRoutine(data):
     #loop for each line
     while (line_idx <= max_line):
         #skip if current line is comment
+        if ('.asc' in lines[line_idx]):
+            line_idx += 1
+            continue
         if ('#' in lines[line_idx]):
             line_idx += 1
             continue
@@ -28,7 +32,7 @@ def InjectSanitizingRoutine(data):
             modified_instruction = '\n'
             modified_instruction += '############### sanitize #############\\\n'
             modified_instruction += '\tpushl %eax\n'
-            modified_instruction += '\tleal %s(%s), %%eax\n' % (hex(offset),reg)
+            modified_instruction += '\tlea %s(%s), %%eax\n' % (offset,reg)
             modified_instruction += '\tpushl %eax\n'
             modified_instruction += '\tcall .bio_inst\n'
             modified_instruction += '\taddl $0x4, %esp\n' # it can be removed
@@ -76,7 +80,6 @@ def InjectShadowMemoryInitRoutine(data):
         line_idx += 1
     substituted_data = SubstituteLines(data, modified_lines) + '\n'
     return substituted_data
-
 
 if (__name__ == '__main__'):
     if (len(sys.argv) != 3):

@@ -60,7 +60,7 @@ if ( __name__ == '__main__' ):
             line = procedures[i][j][1]
             if (start_subtract_offset == 1):
                 if (IsStackMemoryAccessInstruction(line)):
-                    modified_line = AddOffsetofMemoryAccessInstruction(line, AR)
+                    modified_line = AddOffsetofMemoryAccessInstruction(line, -AR)
                     modified_lines.append((ln, modified_line))
                 #for function epilogue
                 if ('\tret' in line):
@@ -85,6 +85,7 @@ if ( __name__ == '__main__' ):
                     modified_line, orig_val \
                             = ModifySubtractionInstruction(line, AR + BR)
                     modified_lines.append((ln, modified_line))
+                    break
                 elif ('push' not in line):
                     push_ebp_found = 0
                     mov_ebp_esp_found = 0

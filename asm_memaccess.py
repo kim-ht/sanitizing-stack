@@ -8,7 +8,7 @@ import re
 # @return - if memory access instruction, it returns below list:
 #               (
 #                 True,
-#                 whether read/write in which it can be 'r' or 'w',
+#                 whether read/write in which it can be 'r' or 'w' or 'rw',
 #                 register used for memory access,
 #                 offset value used in memory access
 #               )
@@ -17,10 +17,25 @@ import re
 #                 False,
 #                 dummy string,
 #                 dummy string,
-#                 dummy string
+#                 0
 #               )
 #
 def IsMemoryAccessInstruction(instr):
+    #print instr
+    tmp = re.findall('\((%.*)\).*\((%.*)\)', instr)
+    if (len(tmp)):
+        register = tmp[0][1]
+        if ('esp' in tmp[0][0] or 'esp' in tmp[0][1]):
+            register = '%esp'
+        elif ('ebp' in tmp[0][0] or 'ebp' in tmp[0][1]):
+            register = '%ebp'
+        read_or_write = 'rw'
+        offset = re.findall('\(%.*\).*(%.*)\(%.*\)', instr)
+        if (len(offset)):
+            offset = offset[0]
+        else:
+            offset = 0
+        return (True, read_or_write, register, offset)
     tmp = re.findall('-?[[0x]*]?[[0-9a-fA-F]*]?\(%.*\)', instr)
     if (len(tmp)):
         if ('), ' in instr):
@@ -28,8 +43,8 @@ def IsMemoryAccessInstruction(instr):
         else:
             read_or_write = 'w'
         register = re.findall('-?[[0x]*]?[[0-9a-fA-F]*]?\((%.*)\)', instr)[0]
-        offset = int(re.findall('(-?[[0x]*]?[[0-9a-fA-F]*]?)\(%.*\)', instr)[0],
-                     16)
+        offset = re.findall('(-?[[0x]*]?[[0-9a-fA-F]*]?)\(%.*\)', instr)[0]
+                     
         return (True, read_or_write, register, offset)
     else:
         return (False, 'dummy', 'dummy', 0)
