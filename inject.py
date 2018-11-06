@@ -5,6 +5,13 @@ from asm_memaccess import *
 import sys
 import re
 
+def IsNum(val):
+    try:
+        int(val)
+        return True
+    except:
+        return False
+
 # InjectSanitizingRoutine - inject sanitizing routines to front of memory
 #                           access instructions.
 #
@@ -28,7 +35,7 @@ def InjectSanitizingRoutine(data):
         tf, rw, reg, offset = IsMemoryAccessInstruction(lines[line_idx])
         #if current line is memory access instruction (True),
         #then it adds sanitizing routine to front of the line.
-        if (tf == True):
+        if (tf == True and IsNum(offset) and rw != 'rw'):
             modified_instruction = '\n'
             modified_instruction += '############### sanitize #############\\\n'
             modified_instruction += '\tpushl %eax\n'

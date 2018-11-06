@@ -8,6 +8,23 @@ import sys
 AR = 0x20 - 0x4 - 0x4 # 0x4 for sfp, 0x4 for return address
 BR = 0x20
 
+
+tmp_redzone = '\n'
+tmp_redzone += '############## set redzone ###############\n'
+tmp_redzone += '\tpushl %eax\n'
+tmp_redzone += '\tleal 0x20(%esp), %eax\n'
+tmp_redzone += '\tpushl $0xffffffff\n'
+tmp_redzone += '\tpushl %eax\n'
+tmp_redzone += '\tcall set_shadow2\n'
+tmp_redzone += '\taddl $0x8, %esp\n' # it can be removed
+tmp_redzone += '\tleal 4(%ebp), %eax\n'
+tmp_redzone += '\tpushl $0xffffffff\n'
+tmp_redzone += '\tpushl %eax\n'
+tmp_redzone += '\tcall set_shadow2\n'
+tmp_redzone += '\taddl $0x8, %esp\n' # it can be removed
+tmp_redzone += '\tpopl %eax\n'
+tmp_redzone += '##########################################\n'
+
 # GetProceduresFromsFile - split procedures based on procedure address on
 #                          .s file
 #
@@ -55,6 +72,7 @@ if ( __name__ == '__main__' ):
         mov_ebp_esp_found = 0
         start_subtract_offset = 0
         j = 0
+        added = 0
         while (j < len(procedures[i])):
             ln = procedures[i][j][0]
             line = procedures[i][j][1]
@@ -78,44 +96,31 @@ if ( __name__ == '__main__' ):
                 mov_ebp_esp_found = 1
             elif (push_ebp_found == 1 and mov_ebp_esp_found == 1):
                 if (len(re.findall('sub.*\t\$.*%esp', line)) != 0):
-                    start_subtract_offset = 1
-                    sub_esp_ln.append(ln + 1)
-                    #procedures[i][j][1] = ModifySubtractionInstruction(line,
-                    #        AR + BR)
-                    modified_line, orig_val \
-                            = ModifySubtractionInstruction(line, AR + BR)
-                    modified_lines.append((ln, modified_line))
-                    break
+                    if (added == 0):
+                        start_subtract_offset = 1
+                        sub_esp_ln.append(ln + 1)
+                        #procedures[i][j][1] = ModifySubtractionInstruction(line,
+                        #        AR + BR)
+                        modified_line, orig_val \
+                                = ModifySubtractionInstruction(line, AR + BR)
+                        modified_line += tmp_redzone
+                        modified_lines.append((ln, modified_line))
+                        added = 1
                 elif ('push' not in line):
                     push_ebp_found = 0
                     mov_ebp_esp_found = 0
             j += 1
         i += 1
     substituted_data = SubstituteLines(data, modified_lines)
-    tmp_redzone = '\n'
-    tmp_redzone += '############## set redzone ###############\n'
-    tmp_redzone += '\tpushl %eax\n'
-    tmp_redzone += '\tleal 0x20(%esp), %eax\n'
-    tmp_redzone += '\tpushl $0xffffffff\n'
-    tmp_redzone += '\tpushl %eax\n'
-    tmp_redzone += '\tcall set_shadow2\n'
-    tmp_redzone += '\taddl $0x8, %esp\n' # it can be removed
-    tmp_redzone += '\tleal 4(%ebp), %eax\n'
-    tmp_redzone += '\tpushl $0xffffffff\n'
-    tmp_redzone += '\tpushl %eax\n'
-    tmp_redzone += '\tcall set_shadow2\n'
-    tmp_redzone += '\taddl $0x8, %esp\n' # it can be removed
-    tmp_redzone += '\tpopl %eax\n'
-    tmp_redzone += '##########################################\n'
     ###################################################################
     # note:
     # in .set_shadow2,
     # 'ret' must be patched to 'ret 8' !
     # then 'addl $0x8, %esp' can be removed
     ###################################################################
-    injected_data = InjectStringtoFrontofLines(substituted_data,
-                                               sub_esp_ln,
-                                               tmp_redzone)
+    #injected_data = InjectStringtoFrontofLines(substituted_data,
+    #                                           sub_esp_ln,
+    #                                           tmp_redzone)
     with open(output_file_name, 'wb') as f:
-        f.write(injected_data)
+        f.write(substituted_data)
 
