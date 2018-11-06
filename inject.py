@@ -79,8 +79,8 @@ def InjectShadowMemoryInitRoutine(data):
             modified_instruction = '\n'
             modified_instruction += '######### init shadow memory #########\\\n'
             modified_instruction += 'main:\n'
-            modified_instruction += '#\tcall create_shadow\n'
-            modified_instruction += '#\tall setup_shadow\n'
+            modified_instruction += '\tcall create_shadow\n'
+            modified_instruction += '\tcall setup_shadow\n'
             modified_instruction += '################## end ################/\n'
             modified_lines.append([line_idx, modified_instruction])
             break

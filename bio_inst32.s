@@ -18,7 +18,7 @@
 	push	0x8(%ebp)
 	push	$label_inst_msg
 #	movl	$0, %eax
-	call	printf
+#	call	printf
 	add	$8, %esp
 	nop	
 #	popq 	%rdx

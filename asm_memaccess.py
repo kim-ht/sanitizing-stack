@@ -44,7 +44,8 @@ def IsMemoryAccessInstruction(instr):
             read_or_write = 'w'
         register = re.findall('-?[[0x]*]?[[0-9a-fA-F]*]?\((%.*)\)', instr)[0]
         offset = re.findall('(-?[[0x]*]?[[0-9a-fA-F]*]?)\(%.*\)', instr)[0]
-                     
+        if ('esp' in register):
+            return (False, 'dummy', 'dummy', 0)
         return (True, read_or_write, register, offset)
     else:
         return (False, 'dummy', 'dummy', 0)
