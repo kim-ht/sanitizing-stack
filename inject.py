@@ -32,7 +32,7 @@ def InjectSanitizingRoutine(data):
         if ('#' in lines[line_idx]):
             line_idx += 1
             continue
-        tf, rw, reg, offset = IsMemoryAccessInstruction(lines[line_idx])
+        tf, rw, reg, offset, size = IsMemoryAccessInstruction(lines[line_idx])
         #if current line is memory access instruction (True),
         #then it adds sanitizing routine to front of the line.
         if (tf == True and IsNum(offset) and rw != 'rw'):
@@ -40,9 +40,10 @@ def InjectSanitizingRoutine(data):
             modified_instruction += '############### sanitize #############\\\n'
             modified_instruction += '\tpushl %eax\n'
             modified_instruction += '\tlea %s(%s), %%eax\n' % (offset,reg)
+            modified_instruction += '\tpushl $%s\n' % (hex(size))
             modified_instruction += '\tpushl %eax\n'
             modified_instruction += '\tcall .bio_inst\n'
-            modified_instruction += '\taddl $0x4, %esp\n' # it can be removed
+            modified_instruction += '\taddl $0x8, %esp\n' # it can be removed
             modified_instruction += '\tpopl %eax\n'
             modified_instruction += lines[line_idx] + '\n'
             modified_instruction += '################# end ################/\n'
@@ -50,7 +51,7 @@ def InjectSanitizingRoutine(data):
             # note:
             # in .bio_instr,
             # 'ret' must be patched to 'ret 4' !
-            # then 'addl $0x4, %esp' can be removed
+            # then 'addl $0x8, %esp' can be removed
             ###################################################################
             modified_lines.append([line_idx, modified_instruction])
         line_idx += 1

@@ -10,45 +10,51 @@ import re
 #                 True,
 #                 whether read/write in which it can be 'r' or 'w' or 'rw',
 #                 register used for memory access,
-#                 offset value used in memory access
+#                 offset value used in memory access,
+#                 size to be accessed
 #               )
 #           if non-memory access instruction, it returns below list:
 #               (
 #                 False,
 #                 dummy string,
 #                 dummy string,
+#                 0, 
 #                 0
 #               )
 #
 def IsMemoryAccessInstruction(instr):
     #print instr
-    tmp = re.findall('\((%.*)\).*\((%.*)\)', instr)
-    if (len(tmp)):
-        register = tmp[0][1]
-        if ('esp' in tmp[0][0] or 'esp' in tmp[0][1]):
-            register = '%esp'
-        elif ('ebp' in tmp[0][0] or 'ebp' in tmp[0][1]):
-            register = '%ebp'
-        read_or_write = 'rw'
-        offset = re.findall('\(%.*\).*(%.*)\(%.*\)', instr)
-        if (len(offset)):
-            offset = offset[0]
-        else:
-            offset = 0
-        return (True, read_or_write, register, offset)
+    if ('rep' in instr):
+        return (False, 'dummy', 'dummy', 0, 0)
     tmp = re.findall('-?[[0x]*]?[[0-9a-fA-F]*]?\(%.*\)', instr)
     if (len(tmp)):
+        #determine read/write
         if ('), ' in instr):
             read_or_write = 'r'
         else:
             read_or_write = 'w'
+        #determine register
         register = re.findall('-?[[0x]*]?[[0-9a-fA-F]*]?\((%.*)\)', instr)[0]
-        offset = re.findall('(-?[[0x]*]?[[0-9a-fA-F]*]?)\(%.*\)', instr)[0]
+        #determine the register is esp
         if ('esp' in register):
-            return (False, 'dummy', 'dummy', 0)
-        return (True, read_or_write, register, offset)
+            return (False, 'dummy', 'dummy', 0, 0)
+        #determine offset
+        offset = re.findall('(-?[[0x]*]?[[0-9a-fA-F]*]?)\(%.*\)', instr)[0]
+        #determine size
+        suffix = instr.split('\t')[1][-1]
+        if (suffix == 'l'):
+            size = 4
+        elif (suffix == 'w'):
+            size = 2
+        elif (suffix == 's'):
+            size = 2
+        elif (suffix == 'b'):
+            size = 1
+        else:
+            size = 4
+        return (True, read_or_write, register, offset, size)
     else:
-        return (False, 'dummy', 'dummy', 0)
+        return (False, 'dummy', 'dummy', 0, 0)
 
 # IsStackMemoryAccessInstruction - determine if the given instruction is stack
 #                                  memory access instruction
@@ -86,8 +92,7 @@ def AddOffsetofMemoryAccessInstruction(instr, offset_to_add):
     modified_instr = instr.replace(offset + '(', modified_offset + '(')
     return modified_instr
 
-# ModifySubtractionInstruction - add value to more to subtract/add more value
-#                                to esp
+# ModifySubtractionInstruction - add value to sbtract/add more value to esp
 #
 # example0)
 # AddOffsetofMemoryAccessInstruction('sub $0x40, %esp', 0x100)
