@@ -13,6 +13,13 @@ BR = 0x20
 
 sanitizing_rountine_num = 0
 
+#def IsNum(num):
+#    try:
+#        int(num, 16)
+#        return True
+#    except:
+#        return False
+
 def GetSetRedzoneAsm(line, size):
     W = size
     L = W - AR - BR
@@ -23,7 +30,7 @@ def GetSetRedzoneAsm(line, size):
     instr += '##################### set redzone ######################\n'
     instr += '########################################################\n'
     #getting base address of shadow memory to edx register
-    instr += '############### obtaining base address of shadow memory ##############\n'
+    instr += '######### obtaining base address of shadow memory ######\n'
     instr += '\tpush\t%eax\n'
     instr += '\tpush\t%edx\n'
     instr += '\tpush\t%fs\n'
@@ -34,11 +41,11 @@ def GetSetRedzoneAsm(line, size):
     instr += '\tlea\t%fs:(%edx), %eax\n'
 
     #generate redzone code for BR
-    instr += '############### redzone code for BR ##################\n'
+    instr += '################# redzone code for BR ###################\n'
     instr += '\tmovl\t$0xffffffff, %fs:(%eax)\n'
 
     #generate redzone code for L and AR
-    instr += '############### redzone code for L ##################\n'
+    instr += '################## redzone code for L ###################\n'
     offset = 4
 
     #generate redzone code for L
@@ -48,13 +55,13 @@ def GetSetRedzoneAsm(line, size):
             offset += 4
 
     #generate redzone code for overlapped part in which L and AR reside together
-        instr += '############### redzone code for L and AR overlapped part ############\n'
+        instr += '######## redzone code for L and AR overlapped part #####\n'
         L_remainder = L % 32
         if (L_remainder != 0):
             b_unit = (L_remainder) / 8
             rest = (L_remainder) % 8
 
-            tmp = -(0xffffffff ^ ~pow(0x100, b_unit))
+            tmp = -(0xffffffff ^ ~pow(0x100, b_unit)) & 0xffffffff
             if (rest != 0):
                 tmp = tmp ^ (pow(0x100, b_unit) * (0xff - rest))
             instr += '\tmovl\t$%#x, %%fs:%#x(%%eax)\n' % (tmp, offset)
@@ -62,7 +69,7 @@ def GetSetRedzoneAsm(line, size):
 
 
     #generate redzone code for rest part of AR
-        instr += '############### redzone code for rest AR part ###############\n'
+        instr += '############ redzone code for rest AR part #############\n'
         if (L % 32 == 0):
             instr += '\tmovl\t$0xffffffff, %%fs:%#x(%%eax)\n' % (offset)
         else:
@@ -95,7 +102,7 @@ def GetSanitizingAsm(line, offset, reg, size):
     instr += '####################### sanitize #######################\n'
     instr += '########################################################\n'
     #getting base address of shadow memory to edx register
-    instr += '############# obtaining base address of shadow memory###########\n'
+    instr += '######## obtaining base address of shadow memory########\n'
     instr += '\tpush\t%eax\n'
     instr += '\tpush\t%edx\n'
     instr += '\tpush\t%fs\n'
@@ -106,13 +113,18 @@ def GetSanitizingAsm(line, offset, reg, size):
     if ('%esp' in reg):
         instr += '\tlea\t%#x(%s), %%edx\n' % (int(offset, 16) + 4*3, reg)
     else:
-        instr += '\tlea\t%#x(%s), %%edx\n' % (int(offset, 16), reg)
+        print repr(line)
+        try:
+            int(offset, 16)
+            instr += '\tlea\t%#x(%s), %%edx\n' % (int(offset, 16), reg)
+        except:
+            instr += '\tlea\t%s(%s), %%edx\n' % (offset, reg)
 
     instr += '\tshr\t$0x3, %edx\n'
     instr += '\tmovb \t%fs:(%edx), %al\n'
 
     #sanitize
-    instr += '####################### detcting #########################\n'
+    instr += '###################### detecting #######################\n'
     instr += '\tcmp\t$0xff, %al\n'
     instr += '\tje\tlabel_bioasan_oob_detected_%u\n' % (sanitizing_rountine_num)
     instr += '\tcmp\t$0, %al\n'
@@ -120,8 +132,8 @@ def GetSanitizingAsm(line, offset, reg, size):
     instr += '\tcmp\t$%#x, %%al\n' % (size)
     instr += '\tjge\tlabel_bioasan_oob_not_detected_%u\n' % (sanitizing_rountine_num)
     instr += 'label_bioasan_oob_detected_%u:\n' % (sanitizing_rountine_num)
-    instr += '\tmovl\t$0x12345678, %eax\n'
-    instr += '\tmovl\t$0x12345678, (%eax)\n'
+    instr += '\tmovl\t$0xdeadbeef, %eax\n'
+    instr += '\tmovl\t$0xbeefdead, (%eax)\n'
     instr += 'label_bioasan_oob_not_detected_%u:\n' % (sanitizing_rountine_num)
     #restore registers
     instr += '############### restoring registers ####################\n'
@@ -137,13 +149,31 @@ def GetSanitizingAsm(line, offset, reg, size):
     return instr
 
 def GetPoisoningAsm(line, size):
-    poisoning_asm = '\n'
-    poisoning_asm += '####### poison stack frame ######\\\n'
-    poisoning_asm += '#'
-    poisoning_asm += '#\tcall bio_asan_poison\n'
-    poisoning_asm += '#################################/\n'
-    poisoning_asm += line + '\n'
-    return poisoning_asm
+    #currently, i'm just do uset redzone
+
+    instr = '\n'
+    #obtain shadow memory address to eax register
+    instr += '########################################################\n'
+    instr += '#################### unset redzone #####################\n'
+    instr += '########################################################\n'
+    instr += '########### obtaining address of shadow memory #########\n'
+    instr += '\tpush\t%eax\n'
+    instr += '\tpush\t%edx\n'
+    instr += '\tpush\t%fs\n'
+    instr += '\tmov\t$0x7, %eax\n'
+    instr += '\tmov\t%eax, %fs\n'
+    instr += '\tlea\t0xc(%esp), %edx\n'
+    instr += '\tshr\t$0x3, %edx\n'
+    instr += '\tlea\t%fs:(%edx), %eax\n'
+
+    #unser redzone
+    offset = 0
+    W = size
+    instr += '#################### unset redzone #####################\n'
+    for i in range((W + 0x19) / 0x20):
+        instr += '\tmovl\t$0x00000000, %%fs:%#x(%%eax)\n' % (offset)
+        offset += 4
+    return instr
 
 def GetInitShadowMemAsm(line):
     init_shadow_mem_asm = '\n'
@@ -283,6 +313,11 @@ def IterateInnerProcedure(lines, start, end):
     i = start
     while (i <= end):
 
+        #skip .asciz line
+        if ('\t.asciz ' in lines[i]):
+            i += 1
+            continue
+
         ##################################
         #add shadow memory init
         ##################################
@@ -343,10 +378,10 @@ def IterateInnerProcedure(lines, start, end):
         #insert sanitizing routine
         ##################################
         if (insert_sanitizing == True and i > ln_stack_frame_constructed):
-            print 'asdasd'
+            #print 'asdasd'
             tf, rw, reg, offset, size = IsMemoryAccessInstruction(lines[i])
             if (tf == True and rw != 'rw'):
-                print tf, rw, repr(reg), repr(offset)
+                #print tf, rw, repr(reg), repr(offset)
                 modified_line = GetSanitizingAsm(lines[i], offset, reg, size)
                 #print 'orig -> ', lines[i]
                 lines[i] = modified_line
@@ -356,8 +391,8 @@ def IterateInnerProcedure(lines, start, end):
         ##################################
         #insert poisoning routine at function epilogue
         ##################################
-#        if ('\tretl\t' in lines[i]):
-#            modified_line = GetPoisoningAsm(lines[i], W)
+        if ('\tleave\t' in lines[i]):
+            modified_line = GetPoisoningAsm(lines[i], W)
 
 def IterateInnerProcedure2(lines, start, end):
     i = start
@@ -396,6 +431,7 @@ def IsRegexMatched(regex, data):
     if (len(regex_result) > 0):
         return True
     return False
+
 def MergeLines(lines):
     merged = '\n'.join(lines)
     return merged
@@ -409,6 +445,7 @@ def IsPushEbp(lines):
         return True;
     else:
         return False;
+
 def RemoveProcedureComments(if_name, of_name):
     procs_range = GetProceduresRange(TMP_FILE)
     lines = GetLinesFromFile(TMP_FILE)
@@ -435,7 +472,7 @@ if (__name__ == '__main__'):
     procs_range = GetProceduresRange(TMP_FILE)
     lines = GetLinesFromFile(TMP_FILE)
     # iterate each procedure
-    print procs_range
+    #print procs_range
     #print procs_range[267]
     for start, end in procs_range:
         #instrumentation is in IterateInnerProcedure()
