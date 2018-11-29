@@ -2,8 +2,8 @@
 import sys
 import re
 
-REGEX_SUB_N_ESP = 'sub.*\t\$(.*), %esp'
-REGEX_MOV_EBP_ESP = '\tmovl\t%esp, %ebp'
+REGEX_SUB_N_ESP = 'subl\t\$(.*), %esp'
+REGEX_MOV_EBP_ESP = '[\t|\ \ \ \ ]movl\t%esp, %ebp'
 REGEX_OFFSET = '(-?[[0x]*]?[[0-9a-fA-F]*]?)\(%.*\)'
 REGEX_COMMENT = '#\ 0x[0-9a-f]*:'
 
@@ -37,6 +37,11 @@ def GetSetRedzoneAsm(line, size):
     instr += '\tmov\t$0x7, %eax\n'
     instr += '\tmov\t%eax, %fs\n'
     instr += '\tlea\t0xc(%esp), %edx\n'
+
+    #0 1 2 3 4 5 6 7 8 >> 0 4 >> 1
+    #4 >> 1 --> 
+    #
+
     instr += '\tshr\t$0x3, %edx\n'
     instr += '\tlea\t%fs:(%edx), %eax\n'
 
@@ -85,6 +90,17 @@ def GetSetRedzoneAsm(line, size):
                 tmp = tmp ^ (pow(0x100, b_unit) * (0x8 - rest))
             instr += '\tmovl\t$%#x, %%fs:%#x(%%eax)\n' % (tmp, offset)
 
+    #for debug
+#    instr += '####################### for debug ######################\n'
+#    instr += '\tpush\t%esp\n'
+#    instr += '\tpush\t%eax\n'
+#    instr += '\tpush\t%ebx\n'
+#    instr += '\tpush\t%edx\n'
+#    instr += '\tcall\tstack_test\n'
+#    instr += '\tpush\t%edx\n'
+#    instr += '\tpush\t%ebx\n'
+#    instr += '\tpush\t%eax\n'
+#    instr += '\tsub\t$4, %esp\n'
     #restore registers
     instr += '############### restoring registers ####################\n'
     instr += '\tpop\t%fs\n'
@@ -113,7 +129,6 @@ def GetSanitizingAsm(line, offset, reg, size):
     if ('%esp' in reg):
         instr += '\tlea\t%#x(%s), %%edx\n' % (int(offset, 16) + 4*3, reg)
     else:
-        print repr(line)
         try:
             int(offset, 16)
             instr += '\tlea\t%#x(%s), %%edx\n' % (int(offset, 16), reg)
@@ -184,7 +199,7 @@ def GetInitShadowMemAsm(line):
     init_shadow_mem_asm += '###########################################\n'
     return init_shadow_mem_asm
 
-# IsMemoryAccessInstruction - determine if the given instruction is memory
+# IsemoryAccessInstruction2 - determine if the given instruction is memory
 #                             access instruction
 #
 # @instr - the instruction line to be checked
@@ -203,7 +218,7 @@ def GetInitShadowMemAsm(line):
 #                 0
 #               )
 #
-def IsMemoryAccessInstruction(instr):
+def IsemoryAccessInstruction2(instr):
     tmp = re.findall('\((%.*)\).*\((%.*)\)', instr)
     if (len(tmp)):
         register = tmp[0][1]
@@ -253,10 +268,11 @@ def GetLastLine(if_name):
 # @return - list of procedures
 #
 def GetProcedures(if_name):
-    look_up_regex = '^\t#Procedure [0x0-9a-fA-F]+'
+    look_up_regex = '^[\t|\ \ \ \ ]#Procedure 0x[0-9a-fA-F]+'
     procs = []
     with open(if_name) as f:
         for line_n, line in enumerate(f, 0):
+            #print repr(line_n), repr(line)
             if (len(re.findall(look_up_regex, line)) != 0):
                 proc_start = line_n
                 procs.append(proc_start)
@@ -298,9 +314,13 @@ def IterateInnerProcedure(lines, start, end):
     W = 0
     L = 0
 
+
     tf, ln_stack_frame_constructed, push_num = IsStackFrameConstructed(lines,
                                                                        start,
                                                                        end)
+#    print repr(lines[start:end])
+    if ('main:' in '\n'.join(lines[start:end])):
+        print tf
     #if ('quotearg_buffer_restyled' in lines[start:end]):
     #    tf == False
     if (tf == True):
@@ -313,14 +333,26 @@ def IterateInnerProcedure(lines, start, end):
     i = start
     while (i <= end):
 
+        #skip data
+        if (IsRegexMatched('# data @ 0x[0-9a-f]*', lines[i]) == True):
+            break
+        if ('\t.asciz' in lines[i]):
+            break
+
+#        if ('main:' in '\n'.join(lines[start:end])):
+#            print lines[i]
+#            print insert_redzone
+#            print modify_sub_n_esp
+#            print modify_stack_memaccess
+#            print insert_sanitizing
         #skip .asciz line
-        if ('\t.asciz ' in lines[i]):
+        if ('[\t\ \ \ \ ].asciz ' in lines[i]):
             i += 1
             continue
 
         ##################################
         #add shadow memory init
-        ##################################
+        ###################################
         if (IsRegexMatched('^main:$', lines[i]) == True):
             lines[i] = GetInitShadowMemAsm(lines[i])
 
@@ -339,20 +371,22 @@ def IterateInnerProcedure(lines, start, end):
 
         ##################################
         #modify stack memory access instruction
+        ##################################
         #ex0) "movl -0x20(%ebp), %eax" -> "movl -0x20-AR+0x8(%ebp), %eax"
         #ex1) "movl 0x20(%esp), %ebx" -> "movl 0x20+BR(%esp), %ebx"
         #ex2) do not modify "movl 0x8(%ebp), %eax" because it is argument access
         ##################################
         if (modify_stack_memaccess == True and i > ln_stack_frame_constructed):
-            tf, rw, reg, offset, size = IsMemoryAccessInstruction(lines[i])
+            tf, rw, reg, offset, size = IsemoryAccessInstruction2(lines[i])
             if (tf == True and rw != 'rw'):
-                #modify ebp access offset
+               #modify ebp access offset
                 if ('%ebp' in reg and int(offset, 16) < push_num * 4 * -1):
                     orig_off = re.findall(REGEX_OFFSET, lines[i])[0]
-                    new_off = hex(int(orig_off, 16) - AR)
-              #      print 'orig -> ', lines[i]
+                    if ('0x' not in orig_off):
+                        new_off = hex(int(orig_off, 10) - AR)
+                    else:
+                        new_off = hex(int(orig_off, 16) - AR)
                     lines[i] = lines[i].replace(orig_off + '(', new_off + '(')
-              #      print 'modi -> ', lines[i]
                 #modify esp access
                 if ('%esp' in reg and int(offset, 16) > 0):
                     orig_off = re.findall(REGEX_OFFSET, lines[i])[0]
@@ -379,20 +413,20 @@ def IterateInnerProcedure(lines, start, end):
         ##################################
         if (insert_sanitizing == True and i > ln_stack_frame_constructed):
             #print 'asdasd'
-            tf, rw, reg, offset, size = IsMemoryAccessInstruction(lines[i])
+            tf, rw, reg, offset, size = IsemoryAccessInstruction2(lines[i])
             if (tf == True and rw != 'rw'):
                 #print tf, rw, repr(reg), repr(offset)
                 modified_line = GetSanitizingAsm(lines[i], offset, reg, size)
                 #print 'orig -> ', lines[i]
                 lines[i] = modified_line
                 #print 'modi -> ', lines[i]
-        i += 1
 
         ##################################
         #insert poisoning routine at function epilogue
         ##################################
-        if ('\tleave\t' in lines[i]):
+        if ('[\t|\ \ \ \ ]leave\t' in lines[i]):
             modified_line = GetPoisoningAsm(lines[i], W)
+        i += 1
 
 def IterateInnerProcedure2(lines, start, end):
     i = start
@@ -404,7 +438,9 @@ def IterateInnerProcedure2(lines, start, end):
 
 def IsStackFrameConstructed(lines, start, end):
     # if 'leave' doesn't exist
-    if ('\tleave\t' not in lines[start:end]):
+    if (IsRegexMatched('[\t|\ \ \ \ ]leave\t', '\n'.join(lines[start:end])) \
+                == False
+            and '\tleal\t4(%esp), %ecx' not in '\n'.join(lines[start:end])):
         return (False, 0, 0)
     mov_esp_ebp_found = False
     push_num = 0
@@ -415,6 +451,8 @@ def IsStackFrameConstructed(lines, start, end):
         if (mov_esp_ebp_found == True):
             if ('pushl\t%' in line):
                 push_num += 1
+                i += 1
+                continue
             elif (IsRegexMatched(REGEX_SUB_N_ESP, line)):
                 return (True, i, push_num)
             else:
@@ -423,6 +461,8 @@ def IsStackFrameConstructed(lines, start, end):
         if (mov_esp_ebp_found == False
                 and IsRegexMatched(REGEX_MOV_EBP_ESP, line) == True):
             mov_esp_ebp_found = True
+            i += 1
+            continue
         i += 1
     return (False, 0, 0)
 
@@ -464,8 +504,7 @@ def RemoveInstructionComments(if_name, of_name):
             removed.append(l)
     SaveFile(of_name, '\n'.join(removed))
 
-if (__name__ == '__main__'):
-    if_name, of_name = ParseArgvs()
+def Stack(if_name, of_name):
     RemoveInstructionComments(if_name, TMP_FILE)
     procs_range = GetProceduresRange(if_name)
     RemoveProcedureComments(TMP_FILE, TMP_FILE)
@@ -478,4 +517,8 @@ if (__name__ == '__main__'):
         #instrumentation is in IterateInnerProcedure()
         IterateInnerProcedure(lines, start, end)
     SaveFile(of_name, MergeLines(lines))
+
+if (__name__ == '__main__'):
+    if_name, of_name = ParseArgvs()
+    Stack(if_name, of_name)
 
